@@ -1,3 +1,11 @@
+from pathlib import Path
+import streamlit as st
+
+BASE_DIR = Path(__file__).parent
+
+st.write("📁 App directory:", BASE_DIR)
+st.write("📂 Files in directory:", list(BASE_DIR.iterdir()))
+
 import streamlit as st
 import pandas as pd
 import numpy as np
