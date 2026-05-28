@@ -1,10 +1,32 @@
 from pathlib import Path
+import joblib
+import pandas as pd
+import numpy as np
 import streamlit as st
 
-BASE_DIR = Path(__file__).parent
+# MUST be the first Streamlit command in the file
+st.set_page_config(
+    page_title="Telco Churn Prediction System",
+    page_icon="🔮",
+    layout="wide",
+)
 
-st.write("📁 App directory:", BASE_DIR)
-st.write("📂 Files in directory:", list(BASE_DIR.iterdir()))
+BASE_DIR = Path(__file__).resolve().parent
+PIPELINE_PATH = BASE_DIR / "churn_pipeline.pkl"
+METADATA_PATH = BASE_DIR / "model_metadata.pkl"
+
+if not PIPELINE_PATH.exists():
+    st.error(f"Missing file: {PIPELINE_PATH}")
+    st.stop()
+
+if not METADATA_PATH.exists():
+    st.error(f"Missing file: {METADATA_PATH}")
+    st.stop()
+
+pipeline = joblib.load(PIPELINE_PATH)
+metadata = joblib.load(METADATA_PATH)
+
+# now all your st.markdown, st.title, sidebar, etc. can come after this
 
 import streamlit as st
 import pandas as pd
