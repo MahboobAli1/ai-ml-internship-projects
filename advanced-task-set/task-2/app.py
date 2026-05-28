@@ -1,7 +1,6 @@
 from pathlib import Path
 import joblib
 import pandas as pd
-import numpy as np
 import streamlit as st
 
 # ==================== PAGE CONFIG (MUST BE FIRST STREAMLIT COMMAND) ====================
@@ -9,7 +8,7 @@ st.set_page_config(
     page_title="Telco Churn Prediction System",
     page_icon="🔮",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # ==================== PATHS ====================
@@ -17,7 +16,7 @@ BASE_DIR = Path(__file__).resolve().parent
 PIPELINE_PATH = BASE_DIR / "churn_pipeline.pkl"
 METADATA_PATH = BASE_DIR / "model_metadata.pkl"
 
-# ==================== REQUIRED TRAINING COLUMNS ====================
+# ==================== TRAINING SCHEMA ====================
 FEATURE_COLUMNS = [
     "SeniorCitizen",
     "Tenure",
@@ -40,12 +39,11 @@ FEATURE_COLUMNS = [
     "PaymentMethod",
 ]
 
-# Exact categories from Telco churn dataset
 GENDER_OPTIONS = ["Male", "Female"]
 YES_NO_OPTIONS = ["Yes", "No"]
 MULTIPLE_LINES_OPTIONS = ["Yes", "No", "No phone service"]
 INTERNET_OPTIONS = ["Fiber optic", "DSL", "No"]
-SERVICE_OPTIONS = ["Yes", "No", "No internet service"]
+SERVICE_YN_OPTIONS = ["Yes", "No"]
 CONTRACT_OPTIONS = ["Month-to-month", "One year", "Two year"]
 PAPERLESS_OPTIONS = ["Yes", "No"]
 PAYMENT_OPTIONS = [
@@ -56,7 +54,7 @@ PAYMENT_OPTIONS = [
 ]
 
 # ==================== HELPERS ====================
-def ensure_files_exist():
+def ensure_files_exist() -> None:
     if not PIPELINE_PATH.exists():
         st.error(f"❌ Missing file: {PIPELINE_PATH.name}")
         st.stop()
@@ -71,6 +69,31 @@ def load_model():
     pipeline = joblib.load(PIPELINE_PATH)
     metadata = joblib.load(METADATA_PATH)
     return pipeline, metadata
+
+
+def normalize_telco_row(df: pd.DataFrame) -> pd.DataFrame:
+    """Make sure dependent fields stay valid so the encoder sees only legal Telco combinations."""
+    df = df.copy()
+
+    if "PhoneService" in df.columns and "MultipleLines" in df.columns:
+        df.loc[df["PhoneService"] == "No", "MultipleLines"] = "No phone service"
+
+    internet_dependent_cols = [
+        "OnlineSecurity",
+        "OnlineBackup",
+        "DeviceProtection",
+        "TechSupport",
+        "StreamingTV",
+        "StreamingMovies",
+    ]
+
+    if "InternetService" in df.columns:
+        mask = df["InternetService"] == "No"
+        for col in internet_dependent_cols:
+            if col in df.columns:
+                df.loc[mask, col] = "No internet service"
+
+    return df
 
 
 def build_input_df(
@@ -94,7 +117,7 @@ def build_input_df(
     paperless_billing,
     payment_method,
 ):
-    data = {
+    input_data = {
         "SeniorCitizen": 1 if senior_citizen == "Yes" else 0,
         "Tenure": tenure,
         "MonthlyCharges": monthly_charges,
@@ -115,19 +138,19 @@ def build_input_df(
         "PaperlessBilling": paperless_billing,
         "PaymentMethod": payment_method,
     }
-    df = pd.DataFrame([data])
-    return df[FEATURE_COLUMNS]
+    df = pd.DataFrame([input_data])
+    return normalize_telco_row(df)[FEATURE_COLUMNS]
 
 
 def clean_uploaded_df(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     df.columns = [c.strip() for c in df.columns]
 
-    # Trim string values
+    # Strip text values
     for col in df.select_dtypes(include=["object"]).columns:
         df[col] = df[col].astype(str).str.strip()
 
-    # Normalize common column-name variants to match training schema
+    # Rename common variants to the exact training names
     rename_map = {
         "seniorcitizen": "SeniorCitizen",
         "tenure": "Tenure",
@@ -159,7 +182,7 @@ def clean_uploaded_df(df: pd.DataFrame) -> pd.DataFrame:
     if normalized:
         df = df.rename(columns=normalized)
 
-    return df
+    return normalize_telco_row(df)
 
 
 def predict_customer(input_df: pd.DataFrame):
@@ -226,8 +249,8 @@ with st.sidebar:
 
     st.markdown("### Input Tips")
     st.info(
-        "Use the exact customer values from the Telco schema. "
-        "Payment and contract labels must match the training data."
+        "Use the exact Telco values shown in the dropdowns. "
+        "Dependent service fields are auto-corrected when InternetService or PhoneService is set to No."
     )
 
     st.markdown("### Training Schema")
@@ -242,7 +265,7 @@ tab1, tab2, tab3 = st.tabs(["🎯 Single Prediction", "📤 Batch Prediction", "
 with tab1:
     st.markdown("## Single Customer Prediction")
     st.markdown(
-        "Enter the customer details below. The model will predict churn probability "
+        "Enter customer details below. The model will predict churn probability "
         "using the saved pipeline."
     )
 
@@ -254,17 +277,12 @@ with tab1:
             senior_citizen = st.selectbox("Senior Citizen", YES_NO_OPTIONS, index=1)
             tenure = st.slider("Tenure (months)", 0, 72, 12)
             monthly_charges = st.number_input(
-                "Monthly Charges ($)",
-                min_value=0.0,
-                value=65.0,
-                step=0.5,
+                "Monthly Charges ($)", min_value=0.0, value=65.0, step=0.5
             )
             total_charges = st.number_input(
-                "Total Charges ($)",
-                min_value=0.0,
-                value=1000.0,
-                step=10.0,
+                "Total Charges ($)", min_value=0.0, value=1000.0, step=10.0
             )
+            st.caption("Age is not used by the trained Telco model, so it is intentionally omitted.")
 
         with col2:
             st.markdown("### 🏷️ Categorical Features")
@@ -272,14 +290,31 @@ with tab1:
             partner = st.selectbox("Has Partner", YES_NO_OPTIONS)
             dependents = st.selectbox("Has Dependents", YES_NO_OPTIONS)
             phone_service = st.selectbox("Phone Service", YES_NO_OPTIONS)
-            multiple_lines = st.selectbox("Multiple Lines", MULTIPLE_LINES_OPTIONS)
+
+            if phone_service == "No":
+                multiple_lines = "No phone service"
+                st.info("Multiple Lines is locked to 'No phone service' because Phone Service is 'No'.")
+            else:
+                multiple_lines = st.selectbox("Multiple Lines", MULTIPLE_LINES_OPTIONS)
+
             internet_service = st.selectbox("Internet Service", INTERNET_OPTIONS)
-            online_security = st.selectbox("Online Security", SERVICE_OPTIONS)
-            online_backup = st.selectbox("Online Backup", SERVICE_OPTIONS)
-            device_protection = st.selectbox("Device Protection", SERVICE_OPTIONS)
-            tech_support = st.selectbox("Tech Support", SERVICE_OPTIONS)
-            streaming_tv = st.selectbox("Streaming TV", SERVICE_OPTIONS)
-            streaming_movies = st.selectbox("Streaming Movies", SERVICE_OPTIONS)
+
+            if internet_service == "No":
+                st.info("Internet-related features are locked to 'No internet service' because Internet Service is 'No'.")
+                online_security = "No internet service"
+                online_backup = "No internet service"
+                device_protection = "No internet service"
+                tech_support = "No internet service"
+                streaming_tv = "No internet service"
+                streaming_movies = "No internet service"
+            else:
+                online_security = st.selectbox("Online Security", SERVICE_YN_OPTIONS)
+                online_backup = st.selectbox("Online Backup", SERVICE_YN_OPTIONS)
+                device_protection = st.selectbox("Device Protection", SERVICE_YN_OPTIONS)
+                tech_support = st.selectbox("Tech Support", SERVICE_YN_OPTIONS)
+                streaming_tv = st.selectbox("Streaming TV", SERVICE_YN_OPTIONS)
+                streaming_movies = st.selectbox("Streaming Movies", SERVICE_YN_OPTIONS)
+
             contract = st.selectbox("Contract", CONTRACT_OPTIONS)
             paperless_billing = st.selectbox("Paperless Billing", PAPERLESS_OPTIONS)
             payment_method = st.selectbox("Payment Method", PAYMENT_OPTIONS)
@@ -366,7 +401,7 @@ with tab2:
     st.markdown("## Batch Prediction")
     st.markdown(
         "Upload a CSV file with the same customer feature columns used in training. "
-        "Extra columns will be ignored if they are not needed."
+        "The app will standardize column names and fix dependent-service combinations."
     )
 
     template_df = pd.DataFrame(columns=FEATURE_COLUMNS)
