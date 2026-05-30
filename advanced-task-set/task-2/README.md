@@ -25,7 +25,7 @@ A production-ready machine learning pipeline for predicting customer churn using
 3. Run the app: `streamlit run app.py`
 
 ### Online (Streamlit Cloud)
-Visit:[ [Your Streamlit Cloud URL]](https://telco-churn-prediction-system.streamlit.app/)
+Visit:[ [Streamlit Cloud URL]](https://telco-churn-prediction-system.streamlit.app/)
 
 ## 📦 Requirements
 - Python 3.8+
