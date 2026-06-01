@@ -1,0 +1,27 @@
+{
+  "model_type": "bert",
+  "model_name": "bert-base-uncased",
+  "architectures": ["BertForSequenceClassification"],
+  "num_labels": 4,
+  "class_names": {
+    "0": "World",
+    "1": "Sports",
+    "2": "Business",
+    "3": "Science/Technology"
+  },
+  "id2label": {
+    "0": "World",
+    "1": "Sports",
+    "2": "Business",
+    "3": "Science/Technology"
+  },
+  "label2id": {
+    "World": 0,
+    "Sports": 1,
+    "Business": 2,
+    "Science/Technology": 3
+  },
+  "max_length": 128,
+  "accuracy": 0.915,
+  "f1_score": 0.915
+}
